@@ -5,8 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "start": "node --env-file=.env.local index.ts",
-    "jev": "node --env-file=.env.local jev.ts"
+    "start": "node --env-file=.env.local index.ts"
   },
   "dependencies": {
     "ai": "^7.0.106"

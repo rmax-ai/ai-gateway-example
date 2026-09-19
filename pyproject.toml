@@ -1,0 +1,9 @@
+[project]
+name = "ai-gateway-example"
+version = "0.1.0"
+description = "Vercel AI Gateway examples: TypeScript (AI SDK) + Python"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+    "pydantic",
+]
