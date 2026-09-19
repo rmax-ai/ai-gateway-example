@@ -11,6 +11,9 @@ importers:
       ai:
         specifier: ^7.0.106
         version: 7.0.106(zod@4.6.5)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
 
 packages:
 

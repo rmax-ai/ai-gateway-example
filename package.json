@@ -8,6 +8,7 @@
     "start": "node --env-file=.env.local index.ts"
   },
   "dependencies": {
-    "ai": "^7.0.106"
+    "ai": "^7.0.106",
+    "zod": "^4.6.5"
   }
 }
