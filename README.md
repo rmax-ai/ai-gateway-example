@@ -43,41 +43,33 @@ package; `main.py` calls the same HTTP endpoint directly from Python. Note
 that pydantic-ai's `TypeSafeModel` integration speaks the TypeSafe API
 protocol and targets `api.typesafe.ai`, not the Gateway.
 
-## Costed comparison: Luna Max vs Jev vs DeepSeek Flash
+## Costed comparison: Luna / Jev / DeepSeek Flash — reasoning max vs none
 
-Both examples run the same three support-ticket triage cases sequentially through `openai/gpt-5.6-luna` at reasoning effort `max`, `typesafe-ai/jev`, and `deepseek/deepseek-v4-flash` at reasoning effort `max`. They normalize department, urgency, and severity for exact agreement; record wall-clock latency and Gateway token usage; retain Gateway-reported costs (Luna, DeepSeek Flash); and independently compute all three models' costs from the Gateway model table (with documented fallback constants).
+Both examples run the same three support-ticket triage cases sequentially through five configurations: `openai/gpt-5.6-luna` and `deepseek/deepseek-v4-flash` at reasoning effort `max` and `none`, plus `typesafe-ai/jev`. Both chat models reason by default when no effort is sent, so the no-reasoning arms pass `reasoning_effort: "none"` explicitly (measured: 0 reasoning tokens). The scripts normalize department, urgency, and severity for exact agreement; record wall-clock latency and Gateway token usage; retain Gateway-reported costs; and independently compute all arms' costs from the Gateway model table (with documented fallback constants).
 
 Latest committed runs: TypeScript `2026-09-19`; Python `2026-09-19`.
 
-| Language | Ticket | Model | Department | Urgent | Severity | Agreement (all models) |
-|---|---|---|---|---:|---:|---:|
-| TypeScript | T1 | Luna Max | billing | yes | 4 | yes |
-| TypeScript | T1 | Jev | billing | yes | 4 | yes |
-| TypeScript | T1 | DeepSeek Flash | billing | yes | 4 | yes |
-| TypeScript | T2 | Luna Max | tech | no | 1 | no |
-| TypeScript | T2 | Jev | tech | yes | 1 | no |
-| TypeScript | T2 | DeepSeek Flash | tech | no | 1 | no |
-| TypeScript | T3 | Luna Max | sales | no | 0 | yes |
-| TypeScript | T3 | Jev | sales | no | 0 | yes |
-| TypeScript | T3 | DeepSeek Flash | sales | no | 0 | yes |
-| Python | T1 | Luna Max | billing | yes | 4 | yes |
-| Python | T1 | Jev | billing | yes | 4 | yes |
-| Python | T1 | DeepSeek Flash | billing | yes | 4 | yes |
-| Python | T2 | Luna Max | tech | no | 1 | no |
-| Python | T2 | Jev | tech | yes | 1 | no |
-| Python | T2 | DeepSeek Flash | tech | no | 1 | no |
-| Python | T3 | Luna Max | sales | no | 0 | yes |
-| Python | T3 | Jev | sales | no | 0 | yes |
-| Python | T3 | DeepSeek Flash | sales | no | 0 | yes |
+| Language | Ticket | Luna max | Luna none | Jev | DeepSeek max | DeepSeek none | All five agree |
+|---|---|---|---|---|---|---|---|
+| TypeScript | T1 | billing / yes / 4 | billing / yes / 4 | billing / yes / 4 | billing / yes / 4 | billing / yes / 4 | yes |
+| TypeScript | T2 | tech / no / 1 | tech / no / 1 | tech / yes / 1 | tech / no / 1 | tech / no / 1 | no |
+| TypeScript | T3 | sales / no / 0 | sales / no / 0 | sales / no / 0 | sales / no / 0 | sales / no / 0 | yes |
+| Python | T1 | billing / yes / 4 | billing / yes / 4 | billing / yes / 4 | billing / yes / 4 | billing / yes / 4 | yes |
+| Python | T2 | tech / no / 1 | tech / no / 1 | tech / yes / 1 | tech / no / 1 | tech / no / 2 | no |
+| Python | T3 | sales / no / 0 | sales / no / 0 | sales / no / 0 | sales / no / 0 | sales / no / 0 | yes |
 
-| Language | Model | Total latency | Input / output tokens | Gateway-reported cost | Table-computed cost |
-|---|---|---:|---:|---:|---:|
-| TypeScript | Luna Max | 6094 ms | 654 / 238 | $0.00041640 | $0.00041640 |
-| TypeScript | Jev | 947 ms | 1416 / 216 | n/a | $0.00005947 |
-| TypeScript | DeepSeek Flash | 7888 ms | 1702 / 542 | $0.00073216 | $0.00036218 |
-| Python | Luna Max | 5127 ms | 624 / 194 | $0.00035760 | $0.00035760 |
-| Python | Jev | 1105 ms | 1416 / 216 | n/a | $0.00005947 |
-| Python | DeepSeek Flash | 6625 ms | 1034 / 332 | $0.00044660 | $0.00022074 |
+| Language | Arm | Total latency | Input / output tokens | Reasoning tokens | Gateway-reported cost | Table-computed cost |
+|---|---|---:|---:|---:|---:|---:|
+| TypeScript | Luna max | 6966 ms | 654 / 244 | 160 | $0.00042360 | $0.00042360 |
+| TypeScript | Luna none | 2741 ms | 654 / 78 | 0 | $0.00022440 | $0.00022440 |
+| TypeScript | Jev | 938 ms | 1416 / 216 | n/a | n/a | $0.00005947 |
+| TypeScript | DeepSeek max | 12760 ms | 1781 / 598 | 350 | $0.00078650 | $0.00038701 |
+| TypeScript | DeepSeek none | 9991 ms | 1544 / 244 | 0 | $0.00050072 | $0.00026416 |
+| Python | Luna max | 7782 ms | 624 / 203 | 121 | $0.00036840 | $0.00036840 |
+| Python | Luna none | 2789 ms | 624 / 78 | 0 | $0.00021840 | $0.00021840 |
+| Python | Jev | 934 ms | 1416 / 216 | n/a | n/a | $0.00005947 |
+| Python | DeepSeek max | 7801 ms | 1034 / 455 | 386 | $0.00052778 | $0.00025272 |
+| Python | DeepSeek none | 6357 ms | 797 / 70 | 0 | $0.00022154 | $0.00012181 |
 
 Full reports: [TypeScript Markdown](reports/comparison-typescript.md), [TypeScript JSON](reports/comparison-typescript.json), [Python Markdown](reports/comparison-python.md), and [Python JSON](reports/comparison-python.json).
 

@@ -1,4 +1,4 @@
-"""Compare Luna Max, Jev, and DeepSeek Flash on the same support-ticket triage task."""
+"""Compare Luna, Jev, and DeepSeek Flash on the same support-ticket triage task at reasoning effort max and none."""
 
 from __future__ import annotations
 
@@ -20,6 +20,15 @@ DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash"
 MODELS_URL = "https://ai-gateway.vercel.sh/v1/models"
 CHAT_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
 EVALUATION_URL = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
+
+ARMS = [
+    {"id": "luna-max", "modelId": LUNA_MODEL, "reasoningEffort": "max", "structuredOutputMechanism": "openai-response-format-json-schema"},
+    {"id": "luna-none", "modelId": LUNA_MODEL, "reasoningEffort": "none", "structuredOutputMechanism": "openai-response-format-json-schema"},
+    {"id": "jev", "modelId": JEV_MODEL, "reasoningEffort": None, "structuredOutputMechanism": "evaluation-protocol"},
+    {"id": "deepseek-max", "modelId": DEEPSEEK_MODEL, "reasoningEffort": "max", "structuredOutputMechanism": "openai-response-format-json-schema"},
+    {"id": "deepseek-none", "modelId": DEEPSEEK_MODEL, "reasoningEffort": "none", "structuredOutputMechanism": "openai-response-format-json-schema"},
+]
+REASONING_NOTE = "Both chat models reason by default when reasoning effort is omitted; the 'none' arms send reasoning effort 'none' explicitly (measured: 0 reasoning tokens)."
 
 TICKETS = [
     {"id": "T1", "text": "My card was charged twice for order #4821! I need this fixed today."},
@@ -157,7 +166,8 @@ def cost_fields(gateway: float | None, computed: float) -> dict[str, Any]:
     }
 
 
-def call_luna(client: httpx.Client, api_key: str, ticket: dict[str, str], pricing: dict[str, Any]) -> dict[str, Any]:
+def call_luna(client: httpx.Client, api_key: str, ticket: dict[str, str], pricing: dict[str, Any], effort: str) -> dict[str, Any]:
+    arm_id = f"luna-{effort}"
     started = time.perf_counter()
     response = client.post(
         CHAT_URL,
@@ -168,7 +178,7 @@ def call_luna(client: httpx.Client, api_key: str, ticket: dict[str, str], pricin
                 {"role": "system", "content": TRIAGE_INSTRUCTIONS},
                 {"role": "user", "content": ticket["text"]},
             ],
-            "reasoning_effort": "max",
+            "reasoning_effort": effort,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
@@ -191,8 +201,8 @@ def call_luna(client: httpx.Client, api_key: str, ticket: dict[str, str], pricin
         raise ValueError("Luna response content is not JSON text")
     decision = SupportTicketTriage.model_validate_json(content)
     usage = as_dict(payload.get("usage"), "Luna usage")
-    input_tokens = nonnegative_int(usage.get("prompt_tokens"), "Luna input tokens")
-    output_tokens = nonnegative_int(usage.get("completion_tokens"), "Luna output tokens")
+    input_tokens = nonnegative_int(usage.get("prompt_tokens"), f"{arm_id} input tokens")
+    output_tokens = nonnegative_int(usage.get("completion_tokens"), f"{arm_id} output tokens")
     completion_details = usage.get("completion_tokens_details")
     reasoning_value = completion_details.get("reasoning_tokens") if isinstance(completion_details, dict) else None
     prompt_details = usage.get("prompt_tokens_details")
@@ -200,19 +210,20 @@ def call_luna(client: httpx.Client, api_key: str, ticket: dict[str, str], pricin
     tokens = {
         "input": input_tokens,
         "output": output_tokens,
-        "reasoning": None if reasoning_value is None else nonnegative_int(reasoning_value, "Luna reasoning tokens"),
-        "cachedInput": None if cached_value is None else nonnegative_int(cached_value, "Luna cached input tokens"),
+        "reasoning": None if reasoning_value is None else nonnegative_int(reasoning_value, f"{arm_id} reasoning tokens"),
+        "cachedInput": None if cached_value is None else nonnegative_int(cached_value, f"{arm_id} cached input tokens"),
     }
-    gateway = finite_number(usage.get("cost"), "Luna Gateway cost", positive=True)
+    gateway = finite_number(usage.get("cost"), f"{arm_id} Gateway cost", positive=True)
     computed = table_cost(tokens, pricing["ratesUsdPerToken"][LUNA_MODEL])
     return {
-        "ticketId": ticket["id"], "ticket": ticket["text"], "modelId": LUNA_MODEL,
+        "ticketId": ticket["id"], "ticket": ticket["text"], "armId": arm_id, "modelId": LUNA_MODEL,
         "decision": decision.model_dump(), "rawDecision": None, "latencyMs": latency_ms,
         "tokens": tokens, "costUsd": cost_fields(gateway, computed),
     }
 
 
-def call_deepseek(client: httpx.Client, api_key: str, ticket: dict[str, str], pricing: dict[str, Any]) -> dict[str, Any]:
+def call_deepseek(client: httpx.Client, api_key: str, ticket: dict[str, str], pricing: dict[str, Any], effort: str) -> dict[str, Any]:
+    arm_id = f"deepseek-{effort}"
     started = time.perf_counter()
     response = client.post(
         CHAT_URL,
@@ -223,7 +234,7 @@ def call_deepseek(client: httpx.Client, api_key: str, ticket: dict[str, str], pr
                 {"role": "system", "content": TRIAGE_INSTRUCTIONS},
                 {"role": "user", "content": ticket["text"]},
             ],
-            "reasoning_effort": "max",
+            "reasoning_effort": effort,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
@@ -246,8 +257,8 @@ def call_deepseek(client: httpx.Client, api_key: str, ticket: dict[str, str], pr
         raise ValueError("DeepSeek Flash response content is not JSON text")
     decision = SupportTicketTriage.model_validate_json(content)
     usage = as_dict(payload.get("usage"), "DeepSeek Flash usage")
-    input_tokens = nonnegative_int(usage.get("prompt_tokens"), "DeepSeek Flash input tokens")
-    output_tokens = nonnegative_int(usage.get("completion_tokens"), "DeepSeek Flash output tokens")
+    input_tokens = nonnegative_int(usage.get("prompt_tokens"), f"{arm_id} input tokens")
+    output_tokens = nonnegative_int(usage.get("completion_tokens"), f"{arm_id} output tokens")
     completion_details = usage.get("completion_tokens_details")
     reasoning_value = completion_details.get("reasoning_tokens") if isinstance(completion_details, dict) else None
     prompt_details = usage.get("prompt_tokens_details")
@@ -255,13 +266,13 @@ def call_deepseek(client: httpx.Client, api_key: str, ticket: dict[str, str], pr
     tokens = {
         "input": input_tokens,
         "output": output_tokens,
-        "reasoning": None if reasoning_value is None else nonnegative_int(reasoning_value, "DeepSeek Flash reasoning tokens"),
-        "cachedInput": None if cached_value is None else nonnegative_int(cached_value, "DeepSeek Flash cached input tokens"),
+        "reasoning": None if reasoning_value is None else nonnegative_int(reasoning_value, f"{arm_id} reasoning tokens"),
+        "cachedInput": None if cached_value is None else nonnegative_int(cached_value, f"{arm_id} cached input tokens"),
     }
-    gateway = finite_number(usage.get("cost"), "DeepSeek Flash Gateway cost", positive=True)
+    gateway = finite_number(usage.get("cost"), f"{arm_id} Gateway cost", positive=True)
     computed = table_cost(tokens, pricing["ratesUsdPerToken"][DEEPSEEK_MODEL])
     return {
-        "ticketId": ticket["id"], "ticket": ticket["text"], "modelId": DEEPSEEK_MODEL,
+        "ticketId": ticket["id"], "ticket": ticket["text"], "armId": arm_id, "modelId": DEEPSEEK_MODEL,
         "decision": decision.model_dump(), "rawDecision": None, "latencyMs": latency_ms,
         "tokens": tokens, "costUsd": cost_fields(gateway, computed),
     }
@@ -303,17 +314,17 @@ def call_jev(client: httpx.Client, api_key: str, ticket: dict[str, str], pricing
     }
     computed = table_cost(tokens, pricing["ratesUsdPerToken"][JEV_MODEL])
     return {
-        "ticketId": ticket["id"], "ticket": ticket["text"], "modelId": JEV_MODEL,
+        "ticketId": ticket["id"], "ticket": ticket["text"], "armId": "jev", "modelId": JEV_MODEL,
         "decision": decision.model_dump(),
         "rawDecision": {"isUrgentProbability": probability, "severityScore": raw_score},
         "latencyMs": latency_ms, "tokens": tokens, "costUsd": cost_fields(None, computed),
     }
 
 
-def totals_for(calls: list[dict[str, Any]], model_id: str) -> dict[str, Any]:
-    selected = [call for call in calls if call["modelId"] == model_id]
+def totals_for(calls: list[dict[str, Any]], arm_id: str) -> dict[str, Any]:
+    selected = [call for call in calls if call["armId"] == arm_id]
     if len(selected) != 3:
-        raise ValueError(f"Expected three calls for {model_id}")
+        raise ValueError(f"Expected three calls for {arm_id}")
     reasoning = [call["tokens"]["reasoning"] for call in selected]
     cached = [call["tokens"]["cachedInput"] for call in selected]
     gateway = [call["costUsd"]["gatewayReported"] for call in selected]
@@ -342,30 +353,45 @@ def yes(value: bool) -> str:
 
 
 def render_markdown(report: dict[str, Any]) -> str:
+    arm_ids = [arm["id"] for arm in report["method"]["arms"]]
+
+    def pair_for(item: dict[str, Any], a: str, b: str) -> dict[str, bool]:
+        return item["pairs"].get(f"{a}-vs-{b}") or item["pairs"][f"{b}-vs-{a}"]
+
     lines = [
-        "# Luna Max vs Jev vs DeepSeek Flash — Python task report", "", f"Generated: {report['timestamp']}", "",
+        "# Support-ticket triage: reasoning max vs none — Python task report", "", f"Generated: {report['timestamp']}", "",
         "## Method", "",
-        f"Nine sequential calls (Luna, then Jev, then DeepSeek Flash for each ticket). Luna and DeepSeek Flash used reasoning effort max and OpenAI-compatible JSON Schema structured output; Jev used the evaluation protocol. {report['pricing']['note']}", "",
-        "## Decisions and agreement", "", "| Ticket | Model | Department | Urgent | Severity |", "|---|---|---|---:|---:|",
+        "Fifteen sequential calls (per ticket: Luna max, Luna none, Jev, DeepSeek max, DeepSeek none). Luna and DeepSeek Flash used OpenAI-compatible JSON Schema structured output; Jev used the evaluation protocol. "
+        + report["method"]["reasoningNote"] + " " + report["pricing"]["note"], "",
+        "## Decisions and agreement", "", "| Ticket | Arm | Model | Department | Urgent | Severity |", "|---|---|---|---:|---:|---:|",
     ]
     for call in report["calls"]:
         decision = call["decision"]
-        lines.append(f"| {call['ticketId']} | {call['modelId']} | {decision['department']} | {yes(decision['is_urgent'])} | {decision['severity_score']} |")
-    lines.extend(["", "| Ticket | Luna vs Jev | Luna vs DeepSeek Flash | Jev vs DeepSeek Flash | All three |", "|---|---:|---:|---:|---:|"])
+        lines.append(f"| {call['ticketId']} | {call['armId']} | {call['modelId']} | {decision['department']} | {yes(decision['is_urgent'])} | {decision['severity_score']} |")
     for item in report["agreements"]:
-        pairs = item["pairs"]
-        lines.append(f"| {item['ticketId']} | {yes(pairs['luna-vs-jev']['all'])} | {yes(pairs['luna-vs-deepseek']['all'])} | {yes(pairs['jev-vs-deepseek']['all'])} | {yes(item['all'])} |")
-    lines.extend(["", "## Per-call measurements", "", "| Ticket | Model | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost | >1% divergence |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"])
+        lines.extend(["", f"Pairwise agreement (all three fields) — {item['ticketId']}:", ""])
+        lines.append(f"| | {' | '.join(arm_ids)} |")
+        lines.append(f"|---|{'---|' * len(arm_ids)}")
+        for a in arm_ids:
+            cells = ["—" if a == b else yes(pair_for(item, a, b)["all"]) for b in arm_ids]
+            lines.append(f"| {a} | {' | '.join(cells)} |")
+        disagreeing = [key.replace("-vs-", " vs ") for key, pair in item["pairs"].items() if not pair["all"]]
+        if item["all"]:
+            lines.extend(["", f"{item['ticketId']}: all five configurations agree."])
+        else:
+            lines.extend(["", f"{item['ticketId']}: not unanimous — disagreeing pairs: {', '.join(disagreeing)}."])
+    lines.extend(["", "## Per-call measurements", "", "| Ticket | Arm | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost | >1% divergence |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"])
     for call in report["calls"]:
         tokens, cost = call["tokens"], call["costUsd"]
         divergence = "n/a" if cost["divergenceOverOnePercent"] is None else yes(cost["divergenceOverOnePercent"])
-        lines.append(f"| {call['ticketId']} | {call['modelId']} | {call['latencyMs']} | {tokens['input']} | {tokens['output']} | {tokens['reasoning'] if tokens['reasoning'] is not None else 'n/a'} | {money(cost['gatewayReported'])} | {money(cost['tableComputed'])} | {divergence} |")
-    lines.extend(["", "## Totals", "", "| Model | Calls | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost |", "|---|---:|---:|---:|---:|---:|---:|---:|"])
-    for model_id in (LUNA_MODEL, JEV_MODEL, DEEPSEEK_MODEL):
-        total = report["totals"][model_id]
-        lines.append(f"| {model_id} | {total['calls']} | {total['latencyMs']} | {total['tokens']['input']} | {total['tokens']['output']} | {total['tokens']['reasoning'] if total['tokens']['reasoning'] is not None else 'n/a'} | {money(total['costUsd']['gatewayReported'])} | {money(total['costUsd']['tableComputed'])} |")
-    divergent = [call["ticketId"] for call in report["calls"] if call["costUsd"]["divergenceOverOnePercent"]]
+        lines.append(f"| {call['ticketId']} | {call['armId']} | {call['latencyMs']} | {tokens['input']} | {tokens['output']} | {tokens['reasoning'] if tokens['reasoning'] is not None else 'n/a'} | {money(cost['gatewayReported'])} | {money(cost['tableComputed'])} | {divergence} |")
+    lines.extend(["", "## Totals", "", "| Arm | Model | Calls | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"])
+    for arm in report["method"]["arms"]:
+        total = report["totals"][arm["id"]]
+        lines.append(f"| {arm['id']} | {arm['modelId']} | {total['calls']} | {total['latencyMs']} | {total['tokens']['input']} | {total['tokens']['output']} | {total['tokens']['reasoning'] if total['tokens']['reasoning'] is not None else 'n/a'} | {money(total['costUsd']['gatewayReported'])} | {money(total['costUsd']['tableComputed'])} |")
+    divergent = [f"{call['ticketId']} ({call['armId']})" for call in report["calls"] if call["costUsd"]["divergenceOverOnePercent"]]
     lines.extend(["", "## Notes", "", f"- Pricing source: `{report['pricing']['source']}`.", f"- Gateway/table divergence over 1%: {', '.join(divergent) if divergent else 'none'}.",
+        "- Both chat models reason by default when reasoning effort is omitted; the `none` arms send reasoning effort `none` explicitly (measured: 0 reasoning tokens).",
         "- Jev has no Gateway-reported cost field; its table cost uses actual token usage and the listed per-token price.",
         "- For multi-provider models the table estimate uses the public list price and can differ from the serving provider's rate; Gateway-reported costs are authoritative.", ""])
     return "\n".join(lines)
@@ -379,14 +405,17 @@ def main() -> None:
         pricing = fetch_pricing(client)
         calls: list[dict[str, Any]] = []
         for ticket in TICKETS:
-            calls.append(call_luna(client, api_key, ticket, pricing))
+            calls.append(call_luna(client, api_key, ticket, pricing, "max"))
+            calls.append(call_luna(client, api_key, ticket, pricing, "none"))
             calls.append(call_jev(client, api_key, ticket, pricing))
-            calls.append(call_deepseek(client, api_key, ticket, pricing))
-    if len(calls) != 9 or any(call["tokens"]["input"] <= 0 or call["tokens"]["output"] < 0 for call in calls):
+            calls.append(call_deepseek(client, api_key, ticket, pricing, "max"))
+            calls.append(call_deepseek(client, api_key, ticket, pricing, "none"))
+    if len(calls) != 15 or any(call["tokens"]["input"] <= 0 or call["tokens"]["output"] < 0 for call in calls):
         raise ValueError("Incomplete or invalid call measurements")
-    def decision_for(ticket_id: str, model_id: str) -> dict[str, Any]:
+
+    def decision_for(ticket_id: str, arm_id: str) -> dict[str, Any]:
         return next(
-            call for call in calls if call["ticketId"] == ticket_id and call["modelId"] == model_id
+            call for call in calls if call["ticketId"] == ticket_id and call["armId"] == arm_id
         )["decision"]
 
     def pair_agreement(a: dict[str, Any], b: dict[str, Any]) -> dict[str, bool]:
@@ -397,26 +426,32 @@ def main() -> None:
 
     agreements = []
     for ticket in TICKETS:
-        pairs = {
-            "luna-vs-jev": pair_agreement(decision_for(ticket["id"], LUNA_MODEL), decision_for(ticket["id"], JEV_MODEL)),
-            "luna-vs-deepseek": pair_agreement(decision_for(ticket["id"], LUNA_MODEL), decision_for(ticket["id"], DEEPSEEK_MODEL)),
-            "jev-vs-deepseek": pair_agreement(decision_for(ticket["id"], JEV_MODEL), decision_for(ticket["id"], DEEPSEEK_MODEL)),
-        }
+        pairs: dict[str, dict[str, bool]] = {}
+        for i, arm_a in enumerate(ARMS):
+            for arm_b in ARMS[i + 1:]:
+                pairs[f"{arm_a['id']}-vs-{arm_b['id']}"] = pair_agreement(
+                    decision_for(ticket["id"], arm_a["id"]), decision_for(ticket["id"], arm_b["id"])
+                )
         agreements.append({"ticketId": ticket["id"], "pairs": pairs, "all": all(pair["all"] for pair in pairs.values())})
-    totals = {LUNA_MODEL: totals_for(calls, LUNA_MODEL), JEV_MODEL: totals_for(calls, JEV_MODEL), DEEPSEEK_MODEL: totals_for(calls, DEEPSEEK_MODEL)}
-    if not (totals[LUNA_MODEL]["costUsd"]["gatewayReported"] > 0 and totals[LUNA_MODEL]["costUsd"]["tableComputed"] > 0 and totals[JEV_MODEL]["costUsd"]["tableComputed"] > 0 and totals[DEEPSEEK_MODEL]["costUsd"]["gatewayReported"] > 0 and totals[DEEPSEEK_MODEL]["costUsd"]["tableComputed"] > 0):
-        raise ValueError("Cost totals must be positive")
+    totals = {arm["id"]: totals_for(calls, arm["id"]) for arm in ARMS}
+    for arm in ARMS:
+        t = totals[arm["id"]]
+        if not (t["costUsd"]["tableComputed"] > 0):
+            raise ValueError(f"Table cost for {arm['id']} must be positive")
+        if arm["modelId"] != JEV_MODEL and not ((t["costUsd"]["gatewayReported"] or 0) > 0):
+            raise ValueError(f"Gateway cost for {arm['id']} must be positive")
+    for arm_id in ("luna-none", "deepseek-none"):
+        if totals[arm_id]["tokens"]["reasoning"] != 0:
+            raise ValueError(f"Expected zero reasoning tokens for {arm_id}")
     report = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "language": "python",
         "task": "support-ticket-triage",
         "method": {
-            "execution": "sequential-ticket-order-luna-jev-deepseek",
-            "lunaReasoningEffort": "max",
-            "lunaStructuredOutputMechanism": "openai-response-format-json-schema",
-            "deepseekReasoningEffort": "max",
-            "deepseekStructuredOutputMechanism": "openai-response-format-json-schema",
+            "execution": "sequential-ticket-order-luna-max-luna-none-jev-deepseek-max-deepseek-none",
+            "arms": ARMS,
+            "reasoningNote": REASONING_NOTE,
             "jevUrgencyThreshold": 0.5,
             "jevSeverityNormalization": "clamp(floor(score + 0.5), 0, 4)",
         },

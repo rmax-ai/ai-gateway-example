@@ -8,6 +8,14 @@ const JEV_MODEL = "typesafe-ai/jev";
 const DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash";
 const MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";
 
+const ARMS = [
+  { id: "luna-max", modelId: LUNA_MODEL, reasoningEffort: "max", structuredOutputMechanism: "ai-sdk-generateObject" },
+  { id: "luna-none", modelId: LUNA_MODEL, reasoningEffort: "none", structuredOutputMechanism: "ai-sdk-generateObject" },
+  { id: "jev", modelId: JEV_MODEL, reasoningEffort: null, structuredOutputMechanism: "evaluation-protocol" },
+  { id: "deepseek-max", modelId: DEEPSEEK_MODEL, reasoningEffort: "max", structuredOutputMechanism: "ai-sdk-forced-tool" },
+  { id: "deepseek-none", modelId: DEEPSEEK_MODEL, reasoningEffort: "none", structuredOutputMechanism: "ai-sdk-forced-tool" },
+] as const;
+
 const tickets = [
   { id: "T1", text: "My card was charged twice for order #4821! I need this fixed today." },
   { id: "T2", text: "The export button in the dashboard fails with a 500 error since this morning. We have a workaround, but please look into it." },
@@ -63,6 +71,7 @@ type Tokens = { input: number; output: number; reasoning: number | null; cachedI
 type CallRecord = {
   ticketId: string;
   ticket: string;
+  armId: string;
   modelId: string;
   decision: Triage;
   rawDecision: { isUrgentProbability: number; severityScore: number } | null;
@@ -165,7 +174,8 @@ function costFields(gatewayReported: number | null, tableComputed: number) {
   };
 }
 
-async function callLuna(ticket: typeof tickets[number], pricing: Pricing): Promise<CallRecord> {
+async function callLuna(ticket: typeof tickets[number], pricing: Pricing, effort: "max" | "none"): Promise<CallRecord> {
+  const armId = `luna-${effort}`;
   const started = performance.now();
   const result = await generateObject({
     model: LUNA_MODEL,
@@ -174,35 +184,37 @@ async function callLuna(ticket: typeof tickets[number], pricing: Pricing): Promi
     schemaDescription: "Routing and severity decision for one support ticket",
     instructions: TRIAGE_INSTRUCTIONS,
     prompt: ticket.text,
-    providerOptions: { openai: { reasoningEffort: "max" } },
+    providerOptions: { openai: { reasoningEffort: effort } },
     maxRetries: 0,
     abortSignal: AbortSignal.timeout(60_000),
   });
   const latencyMs = Math.round(performance.now() - started);
-  const input = requiredCount(result.usage.inputTokens, "Luna input tokens");
-  const output = requiredCount(result.usage.outputTokens, "Luna output tokens");
+  const input = requiredCount(result.usage.inputTokens, `${armId} input tokens`);
+  const output = requiredCount(result.usage.outputTokens, `${armId} output tokens`);
   const reasoning = result.usage.outputTokenDetails.reasoningTokens;
   const cachedInput = result.usage.inputTokenDetails.cacheReadTokens;
   const tokens: Tokens = {
     input,
     output,
-    reasoning: reasoning == null ? null : requiredCount(reasoning, "Luna reasoning tokens"),
-    cachedInput: cachedInput == null ? null : requiredCount(cachedInput, "Luna cached input tokens"),
+    reasoning: reasoning == null ? null : requiredCount(reasoning, `${armId} reasoning tokens`),
+    cachedInput: cachedInput == null ? null : requiredCount(cachedInput, `${armId} cached input tokens`),
   };
   const tableComputed = computedCost(tokens, pricing.ratesUsdPerToken[LUNA_MODEL]);
   return {
     ticketId: ticket.id,
     ticket: ticket.text,
+    armId,
     modelId: LUNA_MODEL,
     decision: triageSchema.parse(result.object),
     rawDecision: null,
     latencyMs,
     tokens,
-    costUsd: costFields(gatewayCost(result.providerMetadata, "Luna"), tableComputed),
+    costUsd: costFields(gatewayCost(result.providerMetadata, armId), tableComputed),
   };
 }
 
-async function callDeepseek(ticket: typeof tickets[number], pricing: Pricing): Promise<CallRecord> {
+async function callDeepseek(ticket: typeof tickets[number], pricing: Pricing, effort: "max" | "none"): Promise<CallRecord> {
+  const armId = `deepseek-${effort}`;
   const started = performance.now();
   // The Gateway does not expose responseFormat for DeepSeek Flash, so structured
   // output goes through a forced tool call (deepseek routes declare tool support).
@@ -217,33 +229,34 @@ async function callDeepseek(ticket: typeof tickets[number], pricing: Pricing): P
     toolChoice: { type: "tool", toolName: "submit_triage" },
     instructions: TRIAGE_INSTRUCTIONS,
     prompt: ticket.text,
-    providerOptions: { deepseek: { reasoningEffort: "max" } },
+    providerOptions: { deepseek: { reasoningEffort: effort } },
     maxRetries: 0,
     abortSignal: AbortSignal.timeout(60_000),
   });
   const latencyMs = Math.round(performance.now() - started);
   const toolCall = result.toolCalls[0];
-  if (!toolCall || toolCall.toolName !== "submit_triage") throw new Error("DeepSeek Flash did not call submit_triage");
-  const input = requiredCount(result.usage.inputTokens, "DeepSeek Flash input tokens");
-  const output = requiredCount(result.usage.outputTokens, "DeepSeek Flash output tokens");
+  if (!toolCall || toolCall.toolName !== "submit_triage") throw new Error(`${armId} did not call submit_triage`);
+  const input = requiredCount(result.usage.inputTokens, `${armId} input tokens`);
+  const output = requiredCount(result.usage.outputTokens, `${armId} output tokens`);
   const reasoning = result.usage.outputTokenDetails.reasoningTokens;
   const cachedInput = result.usage.inputTokenDetails.cacheReadTokens;
   const tokens: Tokens = {
     input,
     output,
-    reasoning: reasoning == null ? null : requiredCount(reasoning, "DeepSeek Flash reasoning tokens"),
-    cachedInput: cachedInput == null ? null : requiredCount(cachedInput, "DeepSeek Flash cached input tokens"),
+    reasoning: reasoning == null ? null : requiredCount(reasoning, `${armId} reasoning tokens`),
+    cachedInput: cachedInput == null ? null : requiredCount(cachedInput, `${armId} cached input tokens`),
   };
   const tableComputed = computedCost(tokens, pricing.ratesUsdPerToken[DEEPSEEK_MODEL]);
   return {
     ticketId: ticket.id,
     ticket: ticket.text,
+    armId,
     modelId: DEEPSEEK_MODEL,
     decision: triageSchema.parse(toolCall.input),
     rawDecision: null,
     latencyMs,
     tokens,
-    costUsd: costFields(gatewayCost(result.providerMetadata, "DeepSeek Flash"), tableComputed),
+    costUsd: costFields(gatewayCost(result.providerMetadata, armId), tableComputed),
   };
 }
 
@@ -274,6 +287,7 @@ async function callJev(ticket: typeof tickets[number], pricing: Pricing): Promis
   return {
     ticketId: ticket.id,
     ticket: ticket.text,
+    armId: "jev",
     modelId: JEV_MODEL,
     decision,
     rawDecision: { isUrgentProbability: probability, severityScore: rawScore },
@@ -283,9 +297,9 @@ async function callJev(ticket: typeof tickets[number], pricing: Pricing): Promis
   };
 }
 
-function totalFor(calls: CallRecord[], modelId: string) {
-  const selected = calls.filter((call) => call.modelId === modelId);
-  if (selected.length !== 3) throw new Error(`Expected three calls for ${modelId}`);
+function totalFor(calls: CallRecord[], armId: string) {
+  const selected = calls.filter((call) => call.armId === armId);
+  if (selected.length !== 3) throw new Error(`Expected three calls for ${armId}`);
   const reasoningValues = selected.map((call) => call.tokens.reasoning);
   const cachedValues = selected.map((call) => call.tokens.cachedInput);
   const gatewayValues = selected.map((call) => call.costUsd.gatewayReported);
@@ -315,32 +329,47 @@ function money(value: number | null): string { return value == null ? "n/a" : `$
 function yes(value: boolean): string { return value ? "yes" : "no"; }
 
 function markdown(report: any): string {
+  const armIds: string[] = report.method.arms.map((arm: { id: string }) => arm.id);
+  const pairFor = (item: any, a: string, b: string) => item.pairs[`${a}-vs-${b}`] ?? item.pairs[`${b}-vs-${a}`];
   const lines = [
-    "# Luna Max vs Jev vs DeepSeek Flash — TypeScript task report",
+    "# Support-ticket triage: reasoning max vs none — TypeScript task report",
     "",
     `Generated: ${report.timestamp}`,
     "",
     "## Method",
     "",
-    `Nine sequential calls (Luna, then Jev, then DeepSeek Flash for each ticket). Luna used reasoning effort max and AI SDK generateObject; DeepSeek Flash used reasoning effort max and a forced tool call; Jev used the evaluation protocol. ${report.pricing.note}`,
+    `Fifteen sequential calls (per ticket: Luna max, Luna none, Jev, DeepSeek max, DeepSeek none). Luna used AI SDK generateObject; DeepSeek Flash used a forced tool call; Jev used the evaluation protocol. ${report.method.reasoningNote} ${report.pricing.note}`,
     "",
     "## Decisions and agreement",
     "",
-    "| Ticket | Model | Department | Urgent | Severity |",
-    "|---|---|---|---:|---:|",
+    "| Ticket | Arm | Model | Department | Urgent | Severity |",
+    "|---|---|---|---|---:|---:|",
   ];
-  for (const call of report.calls) lines.push(`| ${call.ticketId} | ${call.modelId} | ${call.decision.department} | ${yes(call.decision.is_urgent)} | ${call.decision.severity_score} |`);
-  lines.push("", "| Ticket | Luna vs Jev | Luna vs DeepSeek Flash | Jev vs DeepSeek Flash | All three |", "|---|---:|---:|---:|---:|");
-  for (const item of report.agreements) lines.push(`| ${item.ticketId} | ${yes(item.pairs["luna-vs-jev"].all)} | ${yes(item.pairs["luna-vs-deepseek"].all)} | ${yes(item.pairs["jev-vs-deepseek"].all)} | ${yes(item.all)} |`);
-  lines.push("", "## Per-call measurements", "", "| Ticket | Model | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost | >1% divergence |", "|---|---|---:|---:|---:|---:|---:|---:|---:|");
-  for (const call of report.calls) lines.push(`| ${call.ticketId} | ${call.modelId} | ${call.latencyMs} | ${call.tokens.input} | ${call.tokens.output} | ${call.tokens.reasoning ?? "n/a"} | ${money(call.costUsd.gatewayReported)} | ${money(call.costUsd.tableComputed)} | ${call.costUsd.divergenceOverOnePercent == null ? "n/a" : yes(call.costUsd.divergenceOverOnePercent)} |`);
-  lines.push("", "## Totals", "", "| Model | Calls | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost |", "|---|---:|---:|---:|---:|---:|---:|---:|");
-  for (const modelId of [LUNA_MODEL, JEV_MODEL, DEEPSEEK_MODEL]) {
-    const total = report.totals[modelId];
-    lines.push(`| ${modelId} | ${total.calls} | ${total.latencyMs} | ${total.tokens.input} | ${total.tokens.output} | ${total.tokens.reasoning ?? "n/a"} | ${money(total.costUsd.gatewayReported)} | ${money(total.costUsd.tableComputed)} |`);
+  for (const call of report.calls) lines.push(`| ${call.ticketId} | ${call.armId} | ${call.modelId} | ${call.decision.department} | ${yes(call.decision.is_urgent)} | ${call.decision.severity_score} |`);
+  for (const item of report.agreements) {
+    lines.push("", `Pairwise agreement (all three fields) — ${item.ticketId}:`, "");
+    lines.push(`| | ${armIds.join(" | ")} |`);
+    lines.push(`|---|${"---|".repeat(armIds.length)}`);
+    for (const a of armIds) {
+      const cells = armIds.map((b: string) => (a === b ? "—" : yes(pairFor(item, a, b).all)));
+      lines.push(`| ${a} | ${cells.join(" | ")} |`);
+    }
+    const disagreeing = Object.entries(item.pairs).filter(([, pair]) => !(pair as { all: boolean }).all).map(([key]) => key.replace("-vs-", " vs "));
+    lines.push("", item.all ? `${item.ticketId}: all five configurations agree.` : `${item.ticketId}: not unanimous — disagreeing pairs: ${disagreeing.join(", ")}.`);
   }
-  const divergent = report.calls.filter((call: CallRecord) => call.costUsd.divergenceOverOnePercent).map((call: CallRecord) => call.ticketId);
-  lines.push("", "## Notes", "", `- Pricing source: \`${report.pricing.source}\`.`, `- Gateway/table divergence over 1%: ${divergent.length ? divergent.join(", ") : "none"}.`, "- Jev has no Gateway-reported cost field; its table cost uses actual token usage and the listed per-token price.",
+  lines.push("", "## Per-call measurements", "", "| Ticket | Arm | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost | >1% divergence |", "|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const call of report.calls) lines.push(`| ${call.ticketId} | ${call.armId} | ${call.latencyMs} | ${call.tokens.input} | ${call.tokens.output} | ${call.tokens.reasoning ?? "n/a"} | ${money(call.costUsd.gatewayReported)} | ${money(call.costUsd.tableComputed)} | ${call.costUsd.divergenceOverOnePercent == null ? "n/a" : yes(call.costUsd.divergenceOverOnePercent)} |`);
+  lines.push("", "## Totals", "", "| Arm | Model | Calls | Latency ms | Input | Output | Reasoning | Gateway cost | Table cost |", "|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const arm of report.method.arms) {
+    const total = report.totals[arm.id];
+    lines.push(`| ${arm.id} | ${arm.modelId} | ${total.calls} | ${total.latencyMs} | ${total.tokens.input} | ${total.tokens.output} | ${total.tokens.reasoning ?? "n/a"} | ${money(total.costUsd.gatewayReported)} | ${money(total.costUsd.tableComputed)} |`);
+  }
+  const divergent = report.calls.filter((call: CallRecord) => call.costUsd.divergenceOverOnePercent).map((call: CallRecord) => `${call.ticketId} (${call.armId})`);
+  lines.push("", "## Notes", "",
+    `- Pricing source: \`${report.pricing.source}\`.`,
+    `- Gateway/table divergence over 1%: ${divergent.length ? divergent.join(", ") : "none"}.`,
+    "- Both chat models reason by default when reasoning effort is omitted; the `none` arms send reasoning effort `none` explicitly (measured: 0 reasoning tokens).",
+    "- Jev has no Gateway-reported cost field; its table cost uses actual token usage and the listed per-token price.",
     "- For multi-provider models the table estimate uses the public list price and can differ from the serving provider's rate; Gateway-reported costs are authoritative.",
     "- DeepSeek Flash structured output uses a forced tool call: the Gateway does not expose responseFormat for this model.",
     "");
@@ -352,14 +381,16 @@ async function main() {
   const pricing = await fetchPricing();
   const calls: CallRecord[] = [];
   for (const ticket of tickets) {
-    calls.push(await callLuna(ticket, pricing));
+    calls.push(await callLuna(ticket, pricing, "max"));
+    calls.push(await callLuna(ticket, pricing, "none"));
     calls.push(await callJev(ticket, pricing));
-    calls.push(await callDeepseek(ticket, pricing));
+    calls.push(await callDeepseek(ticket, pricing, "max"));
+    calls.push(await callDeepseek(ticket, pricing, "none"));
   }
-  if (calls.length !== 9 || calls.some((call) => call.tokens.input <= 0 || call.tokens.output < 0)) throw new Error("Incomplete or invalid call measurements");
+  if (calls.length !== 15 || calls.some((call) => call.tokens.input <= 0 || call.tokens.output < 0)) throw new Error("Incomplete or invalid call measurements");
   const agreements = tickets.map((ticket) => {
-    const decisionFor = (modelId: string) =>
-      calls.find((call) => call.ticketId === ticket.id && call.modelId === modelId)!.decision;
+    const decisionFor = (armId: string) =>
+      calls.find((call) => call.ticketId === ticket.id && call.armId === armId)!.decision;
     const compare = (a: string, b: string) => {
       const x = decisionFor(a);
       const y = decisionFor(b);
@@ -368,26 +399,33 @@ async function main() {
       const severity_score = x.severity_score === y.severity_score;
       return { department, is_urgent, severity_score, all: department && is_urgent && severity_score };
     };
-    const pairs = {
-      "luna-vs-jev": compare(LUNA_MODEL, JEV_MODEL),
-      "luna-vs-deepseek": compare(LUNA_MODEL, DEEPSEEK_MODEL),
-      "jev-vs-deepseek": compare(JEV_MODEL, DEEPSEEK_MODEL),
-    };
+    const pairs: Record<string, ReturnType<typeof compare>> = {};
+    for (let i = 0; i < ARMS.length; i += 1) {
+      for (let j = i + 1; j < ARMS.length; j += 1) {
+        pairs[`${ARMS[i].id}-vs-${ARMS[j].id}`] = compare(ARMS[i].id, ARMS[j].id);
+      }
+    }
     return { ticketId: ticket.id, pairs, all: Object.values(pairs).every((pair) => pair.all) };
   });
-  const totals = { [LUNA_MODEL]: totalFor(calls, LUNA_MODEL), [JEV_MODEL]: totalFor(calls, JEV_MODEL), [DEEPSEEK_MODEL]: totalFor(calls, DEEPSEEK_MODEL) };
-  if (!(totals[LUNA_MODEL].costUsd.gatewayReported! > 0) || !(totals[LUNA_MODEL].costUsd.tableComputed > 0) || !(totals[JEV_MODEL].costUsd.tableComputed > 0) || !(totals[DEEPSEEK_MODEL].costUsd.gatewayReported! > 0) || !(totals[DEEPSEEK_MODEL].costUsd.tableComputed > 0)) throw new Error("Cost totals must be positive");
+  const totals: Record<string, ReturnType<typeof totalFor>> = {};
+  for (const arm of ARMS) totals[arm.id] = totalFor(calls, arm.id);
+  for (const arm of ARMS) {
+    const total = totals[arm.id];
+    if (!(total.costUsd.tableComputed > 0)) throw new Error(`Table cost for ${arm.id} must be positive`);
+    if (arm.modelId !== JEV_MODEL && !((total.costUsd.gatewayReported ?? 0) > 0)) throw new Error(`Gateway cost for ${arm.id} must be positive`);
+  }
+  for (const armId of ["luna-none", "deepseek-none"] as const) {
+    if (totals[armId].tokens.reasoning !== 0) throw new Error(`Expected zero reasoning tokens for ${armId}`);
+  }
   const report = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     timestamp: new Date().toISOString(),
     language: "typescript",
     task: "support-ticket-triage",
     method: {
-      execution: "sequential-ticket-order-luna-jev-deepseek",
-      lunaReasoningEffort: "max",
-      lunaStructuredOutputMechanism: "ai-sdk-generateObject",
-      deepseekReasoningEffort: "max",
-      deepseekStructuredOutputMechanism: "ai-sdk-forced-tool",
+      execution: "sequential-ticket-order-luna-max-luna-none-jev-deepseek-max-deepseek-none",
+      arms: ARMS,
+      reasoningNote: "Both chat models reason by default when reasoning effort is omitted; the 'none' arms send reasoning effort 'none' explicitly (measured: 0 reasoning tokens).",
       jevUrgencyThreshold: 0.5,
       jevSeverityNormalization: "clamp(floor(score + 0.5), 0, 4)",
     },
