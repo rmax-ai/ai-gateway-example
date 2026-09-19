@@ -1,0 +1,13 @@
+{
+  "name": "ai-gateway-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "start": "node --env-file=.env.local index.ts"
+  },
+  "dependencies": {
+    "ai": "^7.0.106"
+  }
+}
