@@ -1,18 +1,21 @@
 {
-  "schemaVersion": 1,
-  "timestamp": "2026-09-19T20:44:00.316Z",
+  "schemaVersion": 2,
+  "timestamp": "2026-09-19T21:27:36.410Z",
   "language": "typescript",
   "task": "support-ticket-triage",
   "method": {
-    "execution": "sequential-ticket-order-luna-then-jev",
+    "execution": "sequential-ticket-order-luna-jev-deepseek",
     "lunaReasoningEffort": "max",
     "lunaStructuredOutputMechanism": "ai-sdk-generateObject",
+    "deepseekReasoningEffort": "max",
+    "deepseekStructuredOutputMechanism": "ai-sdk-forced-tool",
     "jevUrgencyThreshold": 0.5,
     "jevSeverityNormalization": "clamp(floor(score + 0.5), 0, 4)"
   },
   "models": {
     "luna": "openai/gpt-5.6-luna",
-    "jev": "typesafe-ai/jev"
+    "jev": "typesafe-ai/jev",
+    "deepseek": "deepseek/deepseek-v4-flash"
   },
   "pricing": {
     "source": "gateway-models-api",
@@ -27,6 +30,11 @@
         "input": 4.2e-8,
         "output": 0,
         "cachedInput": 4.2e-8
+      },
+      "deepseek/deepseek-v4-flash": {
+        "input": 1.3e-7,
+        "output": 2.6e-7,
+        "cachedInput": 2.8e-8
       }
     }
   },
@@ -41,16 +49,16 @@
         "severity_score": 4
       },
       "rawDecision": null,
-      "latencyMs": 1676,
+      "latencyMs": 2151,
       "tokens": {
         "input": 212,
-        "output": 67,
-        "reasoning": 39,
+        "output": 77,
+        "reasoning": 49,
         "cachedInput": 0
       },
       "costUsd": {
-        "gatewayReported": 0.0001228,
-        "tableComputed": 0.0001228,
+        "gatewayReported": 0.0001348,
+        "tableComputed": 0.0001348,
         "divergencePct": 0,
         "divergenceOverOnePercent": false
       }
@@ -68,7 +76,7 @@
         "isUrgentProbability": 0.9,
         "severityScore": 4
       },
-      "latencyMs": 300,
+      "latencyMs": 315,
       "tokens": {
         "input": 466,
         "output": 72,
@@ -83,6 +91,30 @@
       }
     },
     {
+      "ticketId": "T1",
+      "ticket": "My card was charged twice for order #4821! I need this fixed today.",
+      "modelId": "deepseek/deepseek-v4-flash",
+      "decision": {
+        "department": "billing",
+        "is_urgent": true,
+        "severity_score": 4
+      },
+      "rawDecision": null,
+      "latencyMs": 1932,
+      "tokens": {
+        "input": 587,
+        "output": 199,
+        "reasoning": 116,
+        "cachedInput": 0
+      },
+      "costUsd": {
+        "gatewayReported": 0.00026048,
+        "tableComputed": 0.00012805,
+        "divergencePct": 50.840755528255535,
+        "divergenceOverOnePercent": true
+      }
+    },
+    {
       "ticketId": "T2",
       "ticket": "The export button in the dashboard fails with a 500 error since this morning. We have a workaround, but please look into it.",
       "modelId": "openai/gpt-5.6-luna",
@@ -92,16 +124,16 @@
         "severity_score": 1
       },
       "rawDecision": null,
-      "latencyMs": 2281,
+      "latencyMs": 1986,
       "tokens": {
         "input": 222,
-        "output": 104,
-        "reasoning": 76,
+        "output": 97,
+        "reasoning": 69,
         "cachedInput": 0
       },
       "costUsd": {
-        "gatewayReported": 0.0001692,
-        "tableComputed": 0.0001692,
+        "gatewayReported": 0.0001608,
+        "tableComputed": 0.0001608,
         "divergencePct": 0,
         "divergenceOverOnePercent": false
       }
@@ -116,10 +148,10 @@
         "severity_score": 1
       },
       "rawDecision": {
-        "isUrgentProbability": 0.62,
-        "severityScore": 1.08
+        "isUrgentProbability": 0.61,
+        "severityScore": 1.12
       },
-      "latencyMs": 350,
+      "latencyMs": 276,
       "tokens": {
         "input": 476,
         "output": 72,
@@ -134,6 +166,30 @@
       }
     },
     {
+      "ticketId": "T2",
+      "ticket": "The export button in the dashboard fails with a 500 error since this morning. We have a workaround, but please look into it.",
+      "modelId": "deepseek/deepseek-v4-flash",
+      "decision": {
+        "department": "tech",
+        "is_urgent": false,
+        "severity_score": 1
+      },
+      "rawDecision": null,
+      "latencyMs": 4390,
+      "tokens": {
+        "input": 598,
+        "output": 263,
+        "reasoning": 180,
+        "cachedInput": 0
+      },
+      "costUsd": {
+        "gatewayReported": 0.00030514,
+        "tableComputed": 0.00014612000000000002,
+        "divergencePct": 52.11378383692731,
+        "divergenceOverOnePercent": true
+      }
+    },
+    {
       "ticketId": "T3",
       "ticket": "What does the Enterprise plan cost for 50 seats, and does it include SSO? We're evaluating options for next quarter.",
       "modelId": "openai/gpt-5.6-luna",
@@ -143,16 +199,16 @@
         "severity_score": 0
       },
       "rawDecision": null,
-      "latencyMs": 947,
+      "latencyMs": 1957,
       "tokens": {
         "input": 220,
-        "output": 26,
-        "reasoning": 0,
+        "output": 64,
+        "reasoning": 36,
         "cachedInput": 0
       },
       "costUsd": {
-        "gatewayReported": 0.0000752,
-        "tableComputed": 0.0000752,
+        "gatewayReported": 0.0001208,
+        "tableComputed": 0.0001208,
         "divergencePct": 0,
         "divergenceOverOnePercent": false
       }
@@ -167,10 +223,10 @@
         "severity_score": 0
       },
       "rawDecision": {
-        "isUrgentProbability": 0.14,
+        "isUrgentProbability": 0.15,
         "severityScore": 0
       },
-      "latencyMs": 327,
+      "latencyMs": 356,
       "tokens": {
         "input": 474,
         "output": 72,
@@ -183,49 +239,124 @@
         "divergencePct": null,
         "divergenceOverOnePercent": null
       }
+    },
+    {
+      "ticketId": "T3",
+      "ticket": "What does the Enterprise plan cost for 50 seats, and does it include SSO? We're evaluating options for next quarter.",
+      "modelId": "deepseek/deepseek-v4-flash",
+      "decision": {
+        "department": "sales",
+        "is_urgent": false,
+        "severity_score": 0
+      },
+      "rawDecision": null,
+      "latencyMs": 1566,
+      "tokens": {
+        "input": 517,
+        "output": 80,
+        "reasoning": 0,
+        "cachedInput": 0
+      },
+      "costUsd": {
+        "gatewayReported": 0.00016654,
+        "tableComputed": 0.00008801,
+        "divergencePct": 47.1538369160562,
+        "divergenceOverOnePercent": true
+      }
     }
   ],
   "agreements": [
     {
       "ticketId": "T1",
-      "department": true,
-      "is_urgent": true,
-      "severity_score": true,
+      "pairs": {
+        "luna-vs-jev": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        },
+        "luna-vs-deepseek": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        },
+        "jev-vs-deepseek": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        }
+      },
       "all": true
     },
     {
       "ticketId": "T2",
-      "department": true,
-      "is_urgent": false,
-      "severity_score": true,
+      "pairs": {
+        "luna-vs-jev": {
+          "department": true,
+          "is_urgent": false,
+          "severity_score": true,
+          "all": false
+        },
+        "luna-vs-deepseek": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        },
+        "jev-vs-deepseek": {
+          "department": true,
+          "is_urgent": false,
+          "severity_score": true,
+          "all": false
+        }
+      },
       "all": false
     },
     {
       "ticketId": "T3",
-      "department": true,
-      "is_urgent": true,
-      "severity_score": true,
+      "pairs": {
+        "luna-vs-jev": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        },
+        "luna-vs-deepseek": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        },
+        "jev-vs-deepseek": {
+          "department": true,
+          "is_urgent": true,
+          "severity_score": true,
+          "all": true
+        }
+      },
       "all": true
     }
   ],
   "totals": {
     "openai/gpt-5.6-luna": {
       "calls": 3,
-      "latencyMs": 4904,
+      "latencyMs": 6094,
       "tokens": {
         "input": 654,
-        "output": 197,
-        "reasoning": 115,
+        "output": 238,
+        "reasoning": 154,
         "cachedInput": 0
       },
       "costUsd": {
-        "gatewayReported": 0.0003672,
-        "tableComputed": 0.0003672
+        "gatewayReported": 0.00041640000000000004,
+        "tableComputed": 0.00041640000000000004
       }
     },
     "typesafe-ai/jev": {
       "calls": 3,
-      "latencyMs": 977,
+      "latencyMs": 947,
       "tokens": {
         "input": 1416,
         "output": 216,
@@ -235,6 +366,20 @@
       "costUsd": {
         "gatewayReported": null,
         "tableComputed": 0.000059472
+      }
+    },
+    "deepseek/deepseek-v4-flash": {
+      "calls": 3,
+      "latencyMs": 7888,
+      "tokens": {
+        "input": 1702,
+        "output": 542,
+        "reasoning": 296,
+        "cachedInput": 0
+      },
+      "costUsd": {
+        "gatewayReported": 0.0007321599999999999,
+        "tableComputed": 0.00036218000000000003
       }
     }
   }
