@@ -79,3 +79,10 @@ Regenerate them with your local Gateway key (the scripts never write it to outpu
 pnpm compare
 uv run --env-file .env.local compare.py
 ```
+
+## Tooling (mise + moon)
+
+Install the pinned tools with `mise install`.
+Run tasks with `MOON_TOOLCHAIN_FORCE_GLOBALS=true moon run <task>`; fmt, lint, test, and build are currently explicit no-ops because the repo has no such scripts.
+`check` aggregates those tasks.
+The existing `pnpm …` and `uv …` commands remain valid and unchanged.
