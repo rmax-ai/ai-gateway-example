@@ -1,0 +1,23 @@
+[[tools."github:moonrepo/moon"]]
+version = "2.5.5"
+backend = "github:moonrepo/moon"
+"platforms.linux-arm64" = { checksum = "sha256:39d55e88774677181d1af3566c4ccd2994cd2d9d8199fcf30dc2d6defc05ac78", url = "https://github.com/moonrepo/moon/releases/download/v2.5.5/moon_cli-aarch64-unknown-linux-gnu.tar.xz", url_api = "https://api.github.com/repos/moonrepo/moon/releases/assets/564873659"}
+
+[[tools."github:pnpm/pnpm"]]
+version = "11.24.0"
+backend = "github:pnpm/pnpm"
+"platforms.linux-arm64" = { checksum = "sha256:52f9cd410ef3bbb1cdd79c399b27772fa6d929bc3cf7c80ff3923a81e1c93be3", url = "https://github.com/pnpm/pnpm/releases/download/v11.24.0/pnpm-linux-arm64.tar.gz", url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/527747053"}
+
+[[tools.node]]
+version = "22.19.0"
+backend = "core:node"
+"platforms.linux-arm64" = { checksum = "sha256:d32817b937219b8f131a28546035183d79e7fd17a86e38ccb8772901a7cd9009", url = "https://nodejs.org/dist/v22.19.0/node-v22.19.0-linux-arm64.tar.gz"}
+
+[[tools.python]]
+version = "3.13.5"
+backend = "core:python"
+
+[[tools.uv]]
+version = "0.12.16"
+backend = "aqua:astral-sh/uv"
+"platforms.linux-arm64" = { checksum = "sha256:5beba1f35c0922fd086cce850ce919e55bc4e873c4fcda891343526afdb4c5b3", url = "https://github.com/astral-sh/uv/releases/download/0.12.16/uv-aarch64-unknown-linux-musl.tar.gz"}

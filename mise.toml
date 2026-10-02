@@ -1,0 +1,9 @@
+[tools]
+python = "3.13.5"
+uv = "0.12.16"
+node = "22.19.0"
+"github:pnpm/pnpm" = "11.24.0"
+"github:moonrepo/moon" = "2.5.5"
+
+[env]
+MOON_TOOLCHAIN_FORCE_GLOBALS = "true"
