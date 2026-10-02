@@ -84,5 +84,7 @@ uv run --env-file .env.local compare.py
 
 Install the pinned tools with `mise install`.
 Run tasks with `MOON_TOOLCHAIN_FORCE_GLOBALS=true moon run <task>`; fmt, lint, test, and build are currently explicit no-ops because the repo has no such scripts.
-`check` aggregates those tasks.
+`check` aggregates those tasks plus a deterministic `lock-scope` guard.
 The existing `pnpm …` and `uv …` commands remain valid and unchanged.
+
+Lock scope (W1): `mise.lock` is generated for **linux-arm64 only** — the platform we actually resolve and test on (pinned mise 2026.2.0, `MISE_EXPERIMENTAL=1 mise lock --platform linux-arm64`). This is a support-matrix statement, not a portability claim: additional platforms are added only when they become real, tested execution targets, and the CI platform is added during the W2 CI migration. `moon run check` runs `.moon/scripts/check-lock-scope.sh`, which fails if the lock claims any platform other than linux-arm64 or selects source/source-map artifacts as an executable asset.

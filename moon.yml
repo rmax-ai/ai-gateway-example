@@ -15,5 +15,9 @@ tasks:
     command: "true"
     options:
       cache: false
+  lock-scope:
+    script: "bash .moon/scripts/check-lock-scope.sh"
+    options:
+      cache: false
   check:
-    deps: ["fmt", "lint", "test", "build"]
+    deps: ["fmt", "lint", "test", "build", "lock-scope"]
